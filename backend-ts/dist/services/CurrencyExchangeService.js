@@ -1,0 +1,130 @@
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.TYPE_ALL = exports.DEFAULT_CURRENCY_TO = exports.TYPE_SAVED_EXCHANGE = exports.TYPE_LIVE_PRICE = void 0;
+const sequelize_1 = require("sequelize");
+const models_1 = __importDefault(require("../models"));
+const currencyexchange_1 = __importDefault(require("../models/currencyexchange"));
+const CurrencyExchange = (0, currencyexchange_1.default)(models_1.default.sequelize, models_1.default.Sequelize.DataTypes);
+exports.TYPE_LIVE_PRICE = "Live Price";
+exports.TYPE_SAVED_EXCHANGE = "Exchanged";
+exports.DEFAULT_CURRENCY_TO = "USD";
+exports.TYPE_ALL = "All";
+const PAGE_SIZE = 13;
+class CurrencyExchangeService {
+    static fetch(type = exports.TYPE_ALL, dateFrom = "", dateTo = "", page = 0) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let filter = {};
+            if (type != exports.TYPE_ALL) {
+                filter.where = {
+                    type,
+                };
+            }
+            if (dateFrom && dateTo) {
+                filter.where = filter.where || {};
+                filter.where.createdAt = {
+                    [sequelize_1.Op.gte]: dateFrom,
+                    [sequelize_1.Op.lte]: dateTo,
+                };
+            }
+            return yield CurrencyExchange.findAll(this.paginate(filter, { page, pageSize: PAGE_SIZE }));
+        });
+    }
+    static paginate(query, { page, pageSize }) {
+        const offset = page * pageSize;
+        const limit = pageSize;
+        return Object.assign(Object.assign({}, query), { offset,
+            limit });
+    }
+    static sortAndFilter(dateFilter = "", sortField = "", sortOrder = "DESC") {
+        return __awaiter(this, void 0, void 0, function* () {
+            let filters = {
+                where: {},
+                order: [],
+            };
+            filters["where"].type = exports.TYPE_SAVED_EXCHANGE; //restrict filters to only saved exchanges
+            if (dateFilter) {
+                filters["where"].createdAt = {
+                    [sequelize_1.Op.gte]: dateFilter,
+                };
+            }
+            if (sortField) {
+                filters["order"].push([sortField, sortOrder]);
+            }
+            console.log(filters, "filters");
+            return yield CurrencyExchange.findAll(filters);
+        });
+    }
+    static create(data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let $date = new Date();
+            data.date_and_time =
+                $date.toLocaleDateString() + " " + $date.toLocaleTimeString();
+            return yield CurrencyExchange.create(data);
+        });
+    }
+    static cryptoExists(crypto) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let count = yield CurrencyExchange.count({
+                where: {
+                    currency_from: crypto,
+                },
+            });
+            return Promise.resolve(count > 0);
+        });
+    }
+    static countAll(type = exports.TYPE_LIVE_PRICE) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return yield CurrencyExchange.count({
+                where: {
+                    type: type,
+                },
+            });
+        });
+    }
+    static update(id, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield CurrencyExchange.update(data, {
+                where: {
+                    id: id,
+                },
+            });
+        });
+    }
+    static createIfNotExists(data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let check = yield this.cryptoExists(data.currency_from);
+            if (!check) {
+                yield this.create(data);
+            }
+            return Promise.resolve("created");
+        });
+    }
+    static getEstimatedConversion(currencyFrom, currencyTo, amount1) {
+        return __awaiter(this, void 0, void 0, function* () {
+            let record = yield CurrencyExchange.findOne({
+                where: {
+                    currency_from: currencyFrom,
+                    type: exports.TYPE_LIVE_PRICE,
+                    currency_to: exports.DEFAULT_CURRENCY_TO,
+                },
+            });
+            if (record) {
+                return Promise.resolve(+amount1 * record.amount1);
+            }
+            return Promise.resolve(0);
+        });
+    }
+}
+exports.default = CurrencyExchangeService;
